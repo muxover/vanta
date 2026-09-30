@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        go: ["1.24", "1.27"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Route an IPv6 test prefix to lo
+        run: sudo ip -6 route add local fd00:5::/64 dev lo
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Format
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Staticcheck
+        if: matrix.go == '1.27'
+        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+      - name: Test
+        env:
+          VANTA_TEST_PREFIX6: fd00:5::/64
+        run: go test -race -count=1 ./...
+
+      - name: Route test (root)
+        run: |
+          go test -c -o sys.test ./internal/sys/
+          sudo VANTA_TEST_ROUTES=1 VANTA_TEST_ROUTES_PREFIX=fd00:6::/64 ./sys.test -test.run TestRoutes -test.v
+          rm sys.test
+
+      - name: Build
+        run: go build ./...
+
+  markdownlint:
+    name: Markdown
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DavidAnson/markdownlint-cli2-action@v24
+        with:
+          globs: "**/*.md"

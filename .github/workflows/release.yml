@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Build and release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27"
+
+      - name: Resolve release notes
+        id: notes
+        run: |
+          FILE="release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$FILE" ]; then
+            NAME=$(head -n 1 "$FILE" | sed -E 's/^# +Vanta +//')
+            echo "file=$FILE" >> "$GITHUB_OUTPUT"
+            echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build binaries
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            dir="vanta_${VERSION}_linux_${arch}"
+            mkdir "$dir"
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$dir/vanta" .
+            cp LICENSE README.md config.example.yaml "$dir/"
+            tar -czf "$dir.tar.gz" "$dir"
+          done
+          sha256sum vanta_*.tar.gz > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ steps.notes.outputs.name }}
+          body_path: ${{ steps.notes.outputs.file }}
+          generate_release_notes: ${{ steps.notes.outputs.file == '' }}
+          files: |
+            vanta_*.tar.gz
+            checksums.txt
+
+      - name: Tell the Go proxy about the version
+        run: curl -fsS "https://proxy.golang.org/github.com/muxover/vanta/@v/${GITHUB_REF_NAME}.info"

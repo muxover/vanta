@@ -1,0 +1,30 @@
+listen_address: "::"
+listen_port: 8080
+metrics_address: "127.0.0.1"
+metrics_port: 9090            # 0 turns metrics off
+debug: false
+
+max_connections: 0            # 0 is unlimited
+dial_timeout: 10              # seconds
+idle_timeout: 300             # seconds without traffic before a connection is closed
+dns_server: system            # or an ip:port such as "[2001:4860:4860::8888]:53"
+dns_cache_size: 8192
+block_private: true
+ipv4_targets: block           # "direct" reaches IPv4-only sites from the server's own IPv4
+
+auth:
+  username: user
+  password: change-me
+allow_ips: []                 # client addresses or prefixes; empty allows everyone
+
+# Owned IPv6 prefixes routed to this server. Every connection leaves from a
+# random address in one of them.
+bind_prefixes:
+  - "2001:db8:1234::/48"
+
+add_routes: true              # add a local route on lo for each prefix
+tune_kernel: false            # raise system-wide TCP limits for heavy load
+
+deleted_headers:
+  - X-Forwarded-For
+  - X-Real-IP
